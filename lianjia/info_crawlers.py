@@ -8,8 +8,9 @@ from shutil import copyfile
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 
-from db.model import database, HouseInfoModel, HistoricalPriceModel, database_init, RentInfoModel
-from lianjia.utils import get_html_content, logger
+from db.model import database, HouseInfoModel, HistoricalPriceModel, database_init, RentInfoModel, CommunityModel, \
+    SellInfoModel
+from lianjia.utils import get_html_content, logger, check_block
 
 ER_SHOU_FANG_PRICE_FILTERS = [f"p{i}" for i in range(1, 8)]
 ER_SHOU_FANG_ROOM_FILTERS = [f"l{i}" for i in range(1, 7)]
@@ -22,6 +23,23 @@ ER_SHOU_FANG_FILTERS = [
 ZU_FANG_RENT_PRICE_FILTERS = [f"rp{i}" for i in range(1, 8)]
 ZU_FANG_FILTERS = [
     ZU_FANG_RENT_PRICE_FILTERS
+]
+
+XIAO_QU_UNIT_PRICE_FILTERS = [f"p{i}" for i in range(1, 8)]
+XIAO_QU_FILTERS = [
+    XIAO_QU_UNIT_PRICE_FILTERS
+]
+
+CHENG_JIAO_PRICE_FILTERS = [f"p{i}" for i in range(1, 8)]
+CHENG_JIAO_ROOM_FILTERS = [f"l{i}" for i in range(1, 7)]
+CHENG_JIAO_AREA_FILTERS = [f"a{i}" for i in range(1, 8)]
+CHENG_JIAO_DIRECTION_FILTERS = [f"f{i}" for i in range(1, 6)]
+CHENG_JIAO_FLOOR_FILTERS = [f"c{i}" for i in range(1, 4)]
+CHENG_JIAO_FILTERS = [
+    CHENG_JIAO_PRICE_FILTERS,
+    CHENG_JIAO_AREA_FILTERS,
+    CHENG_JIAO_ROOM_FILTERS,
+    CHENG_JIAO_DIRECTION_FILTERS
 ]
 
 
@@ -63,9 +81,10 @@ class BaseCrawler:
             抽象了一些公共方法
     """
 
-    def __init__(self, base_url, filters):
+    def __init__(self, base_url, filters, max_page=100):
         self.base_url = base_url
         self.filters = filters
+        self.max_page = max_page
 
     def get_number_of_pages(self, *args, **kwargs):
         raise NotImplemented()
@@ -78,17 +97,17 @@ class BaseCrawler:
         number_of_pages = self.get_number_of_pages(
             BeautifulSoup(get_html_content(url), 'lxml'))
         logger.debug(f"#pages {number_of_pages}")
-        if number_of_pages >= 100 and filter_level < len(self.filters):
+        if number_of_pages >= self.max_page and filter_level < len(self.filters):
             for f in self.filters[filter_level]:
                 self.get_candidate_urls(urls, region, filters + [f], filter_level + 1)
         else:
-            if number_of_pages >= 100 and filter_level >= len(self.filters):
+            if number_of_pages >= self.max_page and filter_level >= len(self.filters):
                 logger.debug(f"{url} can NOT find all!!")
             else:
                 logger.debug(f"{url} can find all!!")
 
             for i in range(min([
-                number_of_pages, 100  # 过滤器不够的到100到情况
+                number_of_pages, self.max_page  # 过滤器不够的到100到情况
             ])):
                 urls.append(make_url(self.base_url, region, [f"pg{i + 1}"] + filters))
 
@@ -293,6 +312,223 @@ class LianjiaZuFangCrawler(BaseCrawler):
             time.sleep(1)
 
 
+class LianjiaXiaoQuCrawler(BaseCrawler):
+    """
+        小区的列表
+    """
+
+    def __init__(self, city):
+        super().__init__(f"http://{city}.lianjia.com/xiaoqu/", XIAO_QU_FILTERS, max_page=30)
+        self.city = city
+
+    def get_number_of_pages(self, soup):
+        try:
+            page_info = soup.find('div', {'class': 'page-box house-lst-page-box'})
+            page_info_str = page_info.get('page-data').split(',')[0]
+            total_pages = int(page_info_str.split(':')[1])
+            return total_pages
+        except:
+            return 0
+
+    def parse_html(self, html, default_info=None):
+        if default_info is None:
+            default_info = {}
+
+        community_data_source = []
+
+        def _get_community_info_by_url(url):
+            _soup = BeautifulSoup(get_html_content(url), 'lxml')
+            if check_block(_soup):
+                return
+            _community_infos = _soup.findAll("div", {"class": "xiaoquInfoItem"})
+            _res = {}
+            for _info in _community_infos:
+                key_type = {
+                    "建筑年代": 'year',
+                    "建筑类型": 'house_type',
+                    "物业费用": 'cost',
+                    "物业公司": 'service',
+                    "开发商": 'company',
+                    "楼栋总数": 'building_num',
+                    "房屋总数": 'house_num',
+                }
+                try:
+                    _key = _info.find("span", {"xiaoquInfoLabel"})
+                    _value = _info.find("span", {"xiaoquInfoContent"})
+                    _key_info = key_type[_key.get_text().strip()]
+                    _value_info = _value.get_text().strip()
+                    _res.update({_key_info: _value_info})
+                except:
+                    continue
+            return _res
+
+        soup = BeautifulSoup(html, 'lxml')
+        for item in soup.findAll("li", {"class": "clear"}):
+            info_dict = {
+                **default_info,
+                'city': 'sh',
+            }
+            try:
+                community_title = item.find("div", {"class": "title"})
+                title = community_title.get_text().strip('\n')
+                link = community_title.a.get('href')
+                info_dict.update({'title': title})
+                info_dict.update({'link': link})
+
+                district = item.find("a", {"class": "district"})
+                info_dict.update({'district': district.get_text()})
+
+                biz_circle = item.find("a", {"class": "bizcircle"})
+                info_dict.update({'biz_circle': biz_circle.get_text()})
+
+                tag_list = item.find("div", {"class": "tagList"})
+                info_dict.update({'tag_list': tag_list.get_text().strip('\n')})
+
+                on_sale = item.find("a", {"class": "totalSellCount"})
+                info_dict.update(
+                    {'on_sale': on_sale.span.get_text().strip('\n')})
+
+                on_rent = item.find("a", {"title": title + "租房"})
+                info_dict.update(
+                    {'on_rent': on_rent.get_text().strip('\n').split('套')[0]})
+
+                info_dict.update({'id': item.get('data-housecode')})
+
+                price = item.find("div", {"class": "totalPrice"})
+                info_dict.update({'price': price.span.get_text().strip('\n')})
+
+                community_info = _get_community_info_by_url(link)
+                for key, value in community_info.items():
+                    info_dict.update({key: value})
+                community_data_source.append(info_dict)
+            except:
+                continue
+
+        return community_data_source
+
+    def get_community_info_for_region(self, region):
+        candidate_urls = load_cache("xiaoqu", region)
+        if candidate_urls is None:
+            candidate_urls = []
+            self.get_candidate_urls(candidate_urls, region)
+            save_cache("xiaoqu", region, candidate_urls)
+
+        for i, url in enumerate(tqdm(candidate_urls)):
+            community_data_source = self.parse_html(
+                html=get_html_content(url), default_info={"region": region})
+            with database.atomic():
+                if community_data_source:
+                    CommunityModel.insert_many(community_data_source).on_conflict_replace().execute()
+            save_cache("xiaoqu", region, candidate_urls[i + 1:])
+            time.sleep(1)
+
+
+class LianjiaChengJiaoCrawler(BaseCrawler):
+    def __init__(self, city):
+        super().__init__(f"http://{city}.lianjia.com/chengjiao/", CHENG_JIAO_FILTERS)
+        self.city = city
+
+    def get_number_of_pages(self, soup):
+        try:
+            page_info = soup.find('div', {'class': 'page-box house-lst-page-box'})
+            page_info_str = page_info.get('page-data').split(',')[0]
+            total_pages = int(page_info_str.split(':')[1])
+            return total_pages
+        except:
+            return 0
+
+    def parse_html(self, html, default_info=None):
+        if default_info is None:
+            default_info = {}
+        data_source = []
+        soup = BeautifulSoup(html, 'lxml')
+
+        for ul_tag in soup.findAll("ul", {"class": "listContent"}):
+            for item in ul_tag.find_all('li'):
+                info_dict = {
+                    "turnover": "",
+                    "list_price": "",
+                    **default_info
+                }
+
+                try:
+                    house_title = item.find("div", {"class": "title"})
+                    info_dict.update({'title': house_title.get_text().strip()})
+                    info_dict.update({'link': house_title.a.get('href')})
+                    house_id = house_title.a.get(
+                        'href').split("/")[-1].split(".")[0]
+                    info_dict.update({'house_id': house_id.strip()})
+
+                    house = house_title.get_text().strip().split(' ')
+                    info_dict.update(
+                        {'community': house[0].strip() if 0 < len(house) else ''})
+                    info_dict.update(
+                        {'house_type': house[1].strip() if 1 < len(house) else ''})
+                    info_dict.update(
+                        {'square': house[2].strip() if 2 < len(house) else ''})
+
+                    house_info = item.find("div", {"class": "houseInfo"})
+                    info = house_info.get_text().split('|')
+                    info_dict.update({'direction': info[0].strip()})
+                    info_dict.update(
+                        {'decoration': info[1].strip() if 1 < len(info) else ''})
+
+                    house_floor = item.find("div", {"class": "positionInfo"})
+                    floor_all = house_floor.get_text().strip().split(' ')
+                    info_dict.update({'floor': floor_all[0].strip()})
+                    info_dict.update({'years': floor_all[-1].strip()})
+
+                    total_price = item.find("div", {"class": "totalPrice"})
+                    if total_price.span is None:
+                        info_dict.update(
+                            {'total_price': total_price.get_text().strip()})
+                    else:
+                        info_dict.update(
+                            {'total_price': total_price.span.get_text().strip()})
+
+                    unit_price = item.find("div", {"class": "unitPrice"})
+                    if unit_price.span is None:
+                        info_dict.update(
+                            {'unit_price': unit_price.get_text().strip()})
+                    else:
+                        info_dict.update(
+                            {'unit_price': unit_price.span.get_text().strip()})
+
+                    deal_date = item.find("div", {"class": "dealDate"})
+                    info_dict.update(
+                        {'deal_date': deal_date.get_text().strip().replace('.', '-')})
+
+                    turnover_item = item.find("span", {"class": "dealCycleTxt"})
+                    if turnover_item is not None:
+                        turnover_info = turnover_item.findAll("span")
+                        if len(turnover_info) == 2:
+                            info_dict.update({
+                                "list_price": turnover_info[0].get_text().strip(),
+                                "turnover": turnover_info[1].get_text().strip()
+                            })
+                    data_source.append(info_dict)
+                except Exception as e:
+                    continue
+        return data_source
+
+    def get_transaction_info_for_region(self, region):
+        candidate_urls = load_cache("chengjiao", region)
+        if candidate_urls is None:
+            candidate_urls = []
+            self.get_candidate_urls(candidate_urls, region)
+            print("Total urls", len(candidate_urls))
+            save_cache("chengjiao", region, candidate_urls)
+
+        for i, url in enumerate(tqdm(candidate_urls)):
+            sale_data_source = self.parse_html(
+                html=get_html_content(url), default_info={"region": region})
+            with database.atomic():
+                if sale_data_source:
+                    SellInfoModel.insert_many(sale_data_source).on_conflict_replace().execute()
+            save_cache("chengjiao", region, candidate_urls[i + 1:])
+            time.sleep(1)
+
+
 if __name__ == '__main__':
     database_init()
     region_list = [
@@ -314,7 +550,12 @@ if __name__ == '__main__':
         "qingpu"  # 青浦
     ]
     for region in region_list:
-        ershoufang_crawler = LianjiaErShouFangCrawler("sh")
-        ershoufang_crawler.get_home_info_for_region(region)
-        zufang_crawler = LianjiaZuFangCrawler("sh")
-        zufang_crawler.get_rent_info_for_region(region)
+        # ershoufang_crawler = LianjiaErShouFangCrawler("sh")
+        # ershoufang_crawler.get_home_info_for_region(region)
+        # zufang_crawler = LianjiaZuFangCrawler("sh")
+        # zufang_crawler.get_rent_info_for_region(region)
+        # xiaoqu_crawler = LianjiaXiaoQuCrawler("sh")
+        # xiaoqu_crawler.get_community_info_for_region(region)
+        chengjiao_crawler = LianjiaChengJiaoCrawler("sh")
+        chengjiao_crawler.get_transaction_info_for_region(region)
+        exit()

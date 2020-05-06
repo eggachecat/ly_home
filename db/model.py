@@ -26,8 +26,9 @@ class CommunityModel(BaseModel):
     title = CharField()
     link = CharField(unique=True)
     district = CharField()
+    region = CharField()
     biz_circle = CharField()  # 商圈
-    tagList = CharField()
+    tag_list = CharField()
     on_sale = CharField()
     on_rent = CharField(null=True)
     year = CharField(null=True)
@@ -87,9 +88,12 @@ class SellInfoModel(BaseModel):
     house_type = CharField()
     square = CharField()
     direction = CharField()
+    decoration = CharField()
+    turnover = CharField()  # 挂牌到成交时间
     floor = CharField()
-    status = CharField()
-    source = CharField()
+    region = CharField()
+    tag_list = CharField()
+    list_price = CharField()
     total_price = CharField()
     unit_price = CharField()
     deal_date = CharField(null=True)
@@ -120,8 +124,20 @@ class RentInfoModel(BaseModel):
         table_name = "rent_info"
 
 
+class SubwayHomeModel(BaseModel):
+    house_id = CharField()
+    subway_name = CharField()
+    subway_stop_name = CharField()
+    subway_distance = CharField()
+
+    class Meta:
+        primary_key = CompositeKey('house_id', 'subway_name', 'subway_stop_name')
+        table_name = "subway_home"
+
+
 def database_init():
     database.connect()
     database.create_tables(
-        [CommunityModel, HouseInfoModel, HistoricalPriceModel, SellInfoModel, RentInfoModel], safe=True)
+        [CommunityModel, HouseInfoModel, HistoricalPriceModel, SellInfoModel, RentInfoModel, SubwayHomeModel],
+        safe=True)
     database.close()

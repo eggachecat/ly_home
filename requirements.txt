@@ -8,3 +8,4 @@ pyparsing
 requests
 six
 tqdm
+selenium
