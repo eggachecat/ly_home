@@ -1,0 +1,10 @@
+appdirs
+beautifulsoup4
+lxml
+mysqlclient
+packaging
+peewee
+pyparsing
+requests
+six
+tqdm
