@@ -120,8 +120,20 @@ class RentInfoModel(BaseModel):
         table_name = "rent_info"
 
 
+class SubwayHomeModel(BaseModel):
+    house_id = CharField()
+    subway_name = CharField()
+    subway_stop_name = CharField()
+    subway_distance = CharField()
+
+    class Meta:
+        primary_key = CompositeKey('house_id', 'subway_name', 'subway_stop_name')
+        table_name = "subway_home"
+
+
 def database_init():
     database.connect()
     database.create_tables(
-        [CommunityModel, HouseInfoModel, HistoricalPriceModel, SellInfoModel, RentInfoModel], safe=True)
+        [CommunityModel, HouseInfoModel, HistoricalPriceModel, SellInfoModel, RentInfoModel, SubwayHomeModel],
+        safe=True)
     database.close()

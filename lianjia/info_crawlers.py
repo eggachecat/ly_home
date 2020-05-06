@@ -312,7 +312,10 @@ if __name__ == '__main__':
         "qingpu"  # 青浦
     ]
     for region in region_list:
-        ershoufang_crawler = LianjiaErShouFangCrawler("sh")
-        ershoufang_crawler.get_home_info_for_region(region)
-        zufang_crawler = LianjiaZuFangCrawler("sh")
-        zufang_crawler.get_rent_info_for_region(region)
+        # ershoufang_crawler = LianjiaErShouFangCrawler("sh")
+        # ershoufang_crawler.get_home_info_for_region(region)
+        # zufang_crawler = LianjiaZuFangCrawler("sh")
+        # zufang_crawler.get_rent_info_for_region(region)
+        ershoufang_detail_crawler = LianjiaErShouFangDetailCrawler()
+        ershoufang_detail_crawler.parse_html(None)
+        exit()

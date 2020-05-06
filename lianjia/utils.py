@@ -68,3 +68,14 @@ def get_html_content(url):
         return
 
     return html_content
+
+
+def run_with_threads(func, n_threads):
+    threads = []
+    for i in range(n_threads):
+        t = threading.Thread(target=func, )
+        t.start()
+        threads.append(t)
+
+    for t in threads:
+        t.join()
