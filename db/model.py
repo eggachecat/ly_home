@@ -26,8 +26,9 @@ class CommunityModel(BaseModel):
     title = CharField()
     link = CharField(unique=True)
     district = CharField()
+    region = CharField()
     biz_circle = CharField()  # 商圈
-    tagList = CharField()
+    tag_list = CharField()
     on_sale = CharField()
     on_rent = CharField(null=True)
     year = CharField(null=True)

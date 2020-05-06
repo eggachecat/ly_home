@@ -79,3 +79,11 @@ def run_with_threads(func, n_threads):
 
     for t in threads:
         t.join()
+
+
+def check_block(soup):
+    if soup.title.string == "414 Request-URI Too Large":
+        logging.error(
+            "Lianjia block your ip, please verify captcha manually at lianjia.com")
+        return True
+    return False
