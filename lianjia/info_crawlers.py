@@ -8,7 +8,8 @@ from shutil import copyfile
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 
-from db.model import database, HouseInfoModel, HistoricalPriceModel, database_init, RentInfoModel, CommunityModel
+from db.model import database, HouseInfoModel, HistoricalPriceModel, database_init, RentInfoModel, CommunityModel, \
+    SellInfoModel
 from lianjia.utils import get_html_content, logger, check_block
 
 ER_SHOU_FANG_PRICE_FILTERS = [f"p{i}" for i in range(1, 8)]
@@ -27,6 +28,18 @@ ZU_FANG_FILTERS = [
 XIAO_QU_UNIT_PRICE_FILTERS = [f"p{i}" for i in range(1, 8)]
 XIAO_QU_FILTERS = [
     XIAO_QU_UNIT_PRICE_FILTERS
+]
+
+CHENG_JIAO_PRICE_FILTERS = [f"p{i}" for i in range(1, 8)]
+CHENG_JIAO_ROOM_FILTERS = [f"l{i}" for i in range(1, 7)]
+CHENG_JIAO_AREA_FILTERS = [f"a{i}" for i in range(1, 8)]
+CHENG_JIAO_DIRECTION_FILTERS = [f"f{i}" for i in range(1, 6)]
+CHENG_JIAO_FLOOR_FILTERS = [f"c{i}" for i in range(1, 4)]
+CHENG_JIAO_FILTERS = [
+    CHENG_JIAO_PRICE_FILTERS,
+    CHENG_JIAO_AREA_FILTERS,
+    CHENG_JIAO_ROOM_FILTERS,
+    CHENG_JIAO_DIRECTION_FILTERS
 ]
 
 
@@ -408,6 +421,112 @@ class LianjiaXiaoQuCrawler(BaseCrawler):
             time.sleep(1)
 
 
+class LianjiaChengJiaoCrawler(BaseCrawler):
+    def __init__(self, city):
+        super().__init__(f"http://{city}.lianjia.com/chengjiao/", CHENG_JIAO_FILTERS)
+        self.city = city
+
+    def get_number_of_pages(self, soup):
+        try:
+            page_info = soup.find('div', {'class': 'page-box house-lst-page-box'})
+            page_info_str = page_info.get('page-data').split(',')[0]
+            total_pages = int(page_info_str.split(':')[1])
+            return total_pages
+        except:
+            return 0
+
+    def parse_html(self, html, default_info=None):
+        if default_info is None:
+            default_info = {}
+        data_source = []
+        soup = BeautifulSoup(html, 'lxml')
+
+        for ul_tag in soup.findAll("ul", {"class": "listContent"}):
+            for item in ul_tag.find_all('li'):
+                info_dict = {
+                    "turnover": "",
+                    "list_price": "",
+                    **default_info
+                }
+
+                try:
+                    house_title = item.find("div", {"class": "title"})
+                    info_dict.update({'title': house_title.get_text().strip()})
+                    info_dict.update({'link': house_title.a.get('href')})
+                    house_id = house_title.a.get(
+                        'href').split("/")[-1].split(".")[0]
+                    info_dict.update({'house_id': house_id.strip()})
+
+                    house = house_title.get_text().strip().split(' ')
+                    info_dict.update(
+                        {'community': house[0].strip() if 0 < len(house) else ''})
+                    info_dict.update(
+                        {'house_type': house[1].strip() if 1 < len(house) else ''})
+                    info_dict.update(
+                        {'square': house[2].strip() if 2 < len(house) else ''})
+
+                    house_info = item.find("div", {"class": "houseInfo"})
+                    info = house_info.get_text().split('|')
+                    info_dict.update({'direction': info[0].strip()})
+                    info_dict.update(
+                        {'decoration': info[1].strip() if 1 < len(info) else ''})
+
+                    house_floor = item.find("div", {"class": "positionInfo"})
+                    floor_all = house_floor.get_text().strip().split(' ')
+                    info_dict.update({'floor': floor_all[0].strip()})
+                    info_dict.update({'years': floor_all[-1].strip()})
+
+                    total_price = item.find("div", {"class": "totalPrice"})
+                    if total_price.span is None:
+                        info_dict.update(
+                            {'total_price': total_price.get_text().strip()})
+                    else:
+                        info_dict.update(
+                            {'total_price': total_price.span.get_text().strip()})
+
+                    unit_price = item.find("div", {"class": "unitPrice"})
+                    if unit_price.span is None:
+                        info_dict.update(
+                            {'unit_price': unit_price.get_text().strip()})
+                    else:
+                        info_dict.update(
+                            {'unit_price': unit_price.span.get_text().strip()})
+
+                    deal_date = item.find("div", {"class": "dealDate"})
+                    info_dict.update(
+                        {'deal_date': deal_date.get_text().strip().replace('.', '-')})
+
+                    turnover_item = item.find("span", {"class": "dealCycleTxt"})
+                    if turnover_item is not None:
+                        turnover_info = turnover_item.findAll("span")
+                        if len(turnover_info) == 2:
+                            info_dict.update({
+                                "list_price": turnover_info[0].get_text().strip(),
+                                "turnover": turnover_info[1].get_text().strip()
+                            })
+                    data_source.append(info_dict)
+                except Exception as e:
+                    continue
+        return data_source
+
+    def get_transaction_info_for_region(self, region):
+        candidate_urls = load_cache("chengjiao", region)
+        if candidate_urls is None:
+            candidate_urls = []
+            self.get_candidate_urls(candidate_urls, region)
+            print("Total urls", len(candidate_urls))
+            save_cache("chengjiao", region, candidate_urls)
+
+        for i, url in enumerate(tqdm(candidate_urls)):
+            sale_data_source = self.parse_html(
+                html=get_html_content(url), default_info={"region": region})
+            with database.atomic():
+                if sale_data_source:
+                    SellInfoModel.insert_many(sale_data_source).on_conflict_replace().execute()
+            save_cache("chengjiao", region, candidate_urls[i + 1:])
+            time.sleep(1)
+
+
 if __name__ == '__main__':
     database_init()
     region_list = [
@@ -433,6 +552,8 @@ if __name__ == '__main__':
         # ershoufang_crawler.get_home_info_for_region(region)
         # zufang_crawler = LianjiaZuFangCrawler("sh")
         # zufang_crawler.get_rent_info_for_region(region)
-        ershoufang_xiaoqu_crawler = LianjiaXiaoQuCrawler("sh")
-        ershoufang_xiaoqu_crawler.get_community_info_for_region(region)
+        # xiaoqu_crawler = LianjiaXiaoQuCrawler("sh")
+        # xiaoqu_crawler.get_community_info_for_region(region)
+        chengjiao_crawler = LianjiaChengJiaoCrawler("sh")
+        chengjiao_crawler.get_transaction_info_for_region(region)
         exit()
