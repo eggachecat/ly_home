@@ -128,6 +128,8 @@ class LianjiaErShouFangCrawler(BaseCrawler):
                         {'title': house_title.a.get_text().strip()})
                     info_dict.update({'link': house_title.a.get('href')})
                     house_id = house_title.a.get('data-housecode')
+                    if house_id is None:
+                        house_id = house_title.a.get('data-lj_action_housedel_id')
                     info_dict.update({'house_id': house_id})
 
                     house_info = item.find("div", {"class": "houseInfo"})
