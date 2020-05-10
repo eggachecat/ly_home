@@ -336,31 +336,31 @@ class LianjiaXiaoQuCrawler(BaseCrawler):
 
         community_data_source = []
 
-        def _get_community_info_by_url(url):
-            _soup = BeautifulSoup(get_html_content(url), 'lxml')
-            if check_block(_soup):
-                return
-            _community_infos = _soup.findAll("div", {"class": "xiaoquInfoItem"})
-            _res = {}
-            for _info in _community_infos:
-                key_type = {
-                    "建筑年代": 'year',
-                    "建筑类型": 'house_type',
-                    "物业费用": 'cost',
-                    "物业公司": 'service',
-                    "开发商": 'company',
-                    "楼栋总数": 'building_num',
-                    "房屋总数": 'house_num',
-                }
-                try:
-                    _key = _info.find("span", {"xiaoquInfoLabel"})
-                    _value = _info.find("span", {"xiaoquInfoContent"})
-                    _key_info = key_type[_key.get_text().strip()]
-                    _value_info = _value.get_text().strip()
-                    _res.update({_key_info: _value_info})
-                except:
-                    continue
-            return _res
+        # def _get_community_info_by_url(url):
+        #     _soup = BeautifulSoup(get_html_content(url), 'lxml')
+        #     if check_block(_soup):
+        #         return
+        #     _community_infos = _soup.findAll("div", {"class": "xiaoquInfoItem"})
+        #     _res = {}
+        #     for _info in _community_infos:
+        #         key_type = {
+        #             "建筑年代": 'year',
+        #             "建筑类型": 'house_type',
+        #             "物业费用": 'cost',
+        #             "物业公司": 'service',
+        #             "开发商": 'company',
+        #             "楼栋总数": 'building_num',
+        #             "房屋总数": 'house_num',
+        #         }
+        #         try:
+        #             _key = _info.find("span", {"xiaoquInfoLabel"})
+        #             _value = _info.find("span", {"xiaoquInfoContent"})
+        #             _key_info = key_type[_key.get_text().strip()]
+        #             _value_info = _value.get_text().strip()
+        #             _res.update({_key_info: _value_info})
+        #         except:
+        #             continue
+        #     return _res
 
         soup = BeautifulSoup(html, 'lxml')
         for item in soup.findAll("li", {"class": "clear"}):
