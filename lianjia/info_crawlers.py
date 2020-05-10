@@ -397,9 +397,9 @@ class LianjiaXiaoQuCrawler(BaseCrawler):
                 price = item.find("div", {"class": "totalPrice"})
                 info_dict.update({'price': price.span.get_text().strip('\n')})
 
-                community_info = _get_community_info_by_url(link)
-                for key, value in community_info.items():
-                    info_dict.update({key: value})
+                # community_info = _get_community_info_by_url(link)
+                # for key, value in community_info.items():
+                #     info_dict.update({key: value})
                 community_data_source.append(info_dict)
             except:
                 continue
@@ -549,13 +549,17 @@ if __name__ == '__main__':
         "songjiang",  # 松江
         "qingpu"  # 青浦
     ]
-    for region in region_list:
-        # ershoufang_crawler = LianjiaErShouFangCrawler("sh")
-        # ershoufang_crawler.get_home_info_for_region(region)
-        # zufang_crawler = LianjiaZuFangCrawler("sh")
-        # zufang_crawler.get_rent_info_for_region(region)
-        # xiaoqu_crawler = LianjiaXiaoQuCrawler("sh")
-        # xiaoqu_crawler.get_community_info_for_region(region)
-        chengjiao_crawler = LianjiaChengJiaoCrawler("sh")
-        chengjiao_crawler.get_transaction_info_for_region(region)
-        exit()
+    while len(region_list) > 0:
+        region = region_list.pop(0)
+        try:
+            # ershoufang_crawler = LianjiaErShouFangCrawler("sh")
+            # ershoufang_crawler.get_home_info_for_region(region)
+            # zufang_crawler = LianjiaZuFangCrawler("sh")
+            # zufang_crawler.get_rent_info_for_region(region)
+            xiaoqu_crawler = LianjiaXiaoQuCrawler("sh")
+            xiaoqu_crawler.get_community_info_for_region(region)
+            # chengjiao_crawler = LianjiaChengJiaoCrawler("sh")
+            # chengjiao_crawler.get_transaction_info_for_region(region)
+        except:
+            region_list.append(region)
+            time.sleep(10)
